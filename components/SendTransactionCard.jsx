@@ -1,47 +1,61 @@
-import { useSendTransaction } from "@privy-io/react-auth";
-import { useState } from "react";
+import { useWallets } from "@privy-io/react-auth";
+import { getAddress, isAddress, parseUnits } from "ethers"; // No need for getAddress()
 import { Zap } from "lucide-react";
+import { useState } from "react";
+import { encodeFunctionData } from "viem";
+import { RUSDCABI } from "../contracts/abis/RUSDC";
 
 export default function SendTransactionCard() {
-  const { sendTransaction } = useSendTransaction();
-
-  const [toAddress, setToAddress] = useState("0x5B5BfDA80cD063B65a2D2D5864e9c032dFB6e27A"); // You can change this
-  const [amount, setAmount] = useState("0.01"); // In BNB
+  const CONTRACT_ADDRESS = "0xEbB3b2176FD8DA36047D077aeEE200eb9E3F229F".trim().toLowerCase();
+  const { wallets } = useWallets();
+  const [toAddress, setToAddress] = useState("");
+  const [amount, setAmount] = useState("1");
   const [txHash, setTxHash] = useState(null);
 
   const handleSendTransaction = async () => {
-    const valueInWei = (BigInt(Math.floor(Number(amount) * 1e18))).toString(16); // Convert BNB to wei (hex)
-
-    const unsignedTx = {
-      to: toAddress,
-      chainId: 97, // BSC Testnet Chain ID
-      value: `0x${valueInWei}`, // must be hex string
-    };
-
-    const uiOptions = {
-      header: "Confirm Transfer",
-      description: `You are about to send ${amount} BNB to ${toAddress}`,
-      buttonText: "Send Transaction",
-      successHeader: "Transaction Sent!",
-      successDescription: "Your BNB is on its way.",
-      transactionInfo: {
-        title: "Transaction Details",
-        action: "Send BNB",
-        contractInfo: {
-          name: "Binance Smart Chain Testnet",
-          url: `https://testnet.bscscan.com/address/${toAddress}`,
-          imgUrl: "https://cryptologos.cc/logos/binance-coin-bnb-logo.png",
-          imgSize: "sm",
-        },
-      },
-    };
-
     try {
-      const { hash } = await sendTransaction(unsignedTx, { uiOptions });
-      setTxHash(hash);
+      if (!wallets || wallets.length === 0) {
+        throw new Error("No wallets available");
+      }
+
+      const wallet = wallets[0];
+      const provider = await wallet?.getEthereumProvider();
+      if (!provider) {
+        throw new Error("No provider available");
+      }
+
+      console.log("Contract Address:", CONTRACT_ADDRESS);
+      if (!isAddress(getAddress(CONTRACT_ADDRESS))) {
+        throw new Error("Invalid contract address: " + CONTRACT_ADDRESS);
+      }
+
+      const trimmedToAddress = toAddress.trim();
+      if (!isAddress(trimmedToAddress)) {
+        throw new Error("Invalid recipient address: " + trimmedToAddress);
+      }
+
+      const parsedAmount = parseUnits(amount, 6);
+
+      const data = encodeFunctionData({
+        abi: RUSDCABI,
+        functionName: "sendPayment",
+        args: [trimmedToAddress, parsedAmount],
+      });
+
+      const transactionRequest = {
+        from: wallet?.address,
+        to: getAddress(CONTRACT_ADDRESS),
+        data: data,
+      };
+
+      const transactionHash = await provider?.request({
+        method: "eth_sendTransaction",
+        params: [transactionRequest],
+      });
+
+      setTxHash(transactionHash);
     } catch (error) {
       console.error("Transaction failed", error);
-      alert("Transaction failed - check console for details");
     }
   };
 
@@ -49,7 +63,7 @@ export default function SendTransactionCard() {
     <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-xl text-white w-full max-w-lg mx-auto">
       <div className="flex items-center gap-3 mb-4">
         <Zap className="w-6 h-6 text-cyan-400" />
-        <h2 className="text-lg font-semibold">Send BNB (BSC Testnet)</h2>
+        <h2 className="text-lg font-semibold">Send USDC (Base Sepolia Testnet)</h2>
       </div>
 
       <div className="space-y-4">
@@ -64,7 +78,7 @@ export default function SendTransactionCard() {
         </div>
 
         <div>
-          <label className="block text-sm text-neutral-400">Amount (BNB)</label>
+          <label className="block text-sm text-neutral-400">Amount (USDC)</label>
           <input
             type="text"
             value={amount}
@@ -82,14 +96,14 @@ export default function SendTransactionCard() {
 
         {txHash && (
           <div className="mt-4 p-4 bg-neutral-800 rounded-lg text-sm">
-            ✅ Transaction sent! 
+            ✅ Transaction sent!
             <a
-              href={`https://testnet.bscscan.com/tx/${txHash}`}
+              href={`https://base-sepolia.blockscout.com/tx/${txHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-cyan-400 underline ml-1"
             >
-              View on BscScan
+              View on Base Sepolia Blockscout
             </a>
           </div>
         )}
