@@ -1,4 +1,4 @@
-export const RUSDC = [
+export const RUSDCABI = [
   {
     inputs: [
       {
